@@ -327,6 +327,13 @@ body {
     font-size: 1.0em;
 }
 
+/* 空行用のスタイル */
+.empty-line {
+    height: 26px; /* チェックボックス項目とほぼ同じ高さ */
+    margin-bottom: 8px; /* checkbox-itemと同じマージン */
+    display: block; /* ブロック要素として表示 */
+}
+
 .option-container {
     margin-top: 10px;
     display: flex;
@@ -599,3 +606,74 @@ body {
 .submenu-visible {
     display: block;
 }
+
+/* メニュー説明レジェンドのスタイル */
+.menu-legend {
+    position: fixed;
+    top: 70px;
+    right: 20px;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    width: 400px;
+    z-index: 1050;
+    display: none;
+    user-select: none;
+}
+
+.menu-legend-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    cursor: move;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+.menu-legend-title {
+    font-weight: bold;
+    color: #333;
+}
+
+.menu-legend-close {
+    cursor: pointer;
+    font-size: 1.2em;
+    color: #666;
+}
+
+.menu-legend-close:hover {
+    color: #000;
+}
+
+.menu-legend-content {
+    padding: 10px;
+    text-align: left;
+    font-size: 1em;
+}
+
+.menu-legend-content ul {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+
+.menu-legend-content li {
+    margin-bottom: 5px;
+}
+
+.menu-legend.dragging {
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+/* フローティングレジェンドのドラッグ位置を動的に設定 */
+.menu-legend-position {
+    position: fixed;
+    left: var(--legend-left, 'auto');
+    top: var(--legend-top, 'auto');
+}
+/* メニュー説明レジェンドのスタイル　終わり */

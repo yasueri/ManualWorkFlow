@@ -646,6 +646,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <input type="checkbox" id="nota-check-${index}" class="nota-checkbox">
                                 <label for="nota-check-${index}">${renderSafeHtml(line)}</label>
                             </div>`;
+                        } else {
+                            // 空行の場合は、チェックボックスなしの空のdivを追加
+                            checkboxHtml += `<div class="empty-line"></div>`;
                         }
                     });
                     
@@ -843,15 +846,21 @@ document.addEventListener('DOMContentLoaded', function() {
             // 警告ポップアップの閉じるボタン
             setEventHandler("warning-popup-ok", "click", hideWarningPopup);
 
-            // ドロップダウンメニューの表示・非表示
+            // ドロップダウンメニューの表示・非表示とフローティングレジェンドの連動
             const headerMenu = document.querySelector(".header-menu");
             const dropdownMenu = document.getElementById("dropdown-menu");
+            const menuLegend = document.getElementById("menu-legend");
 
             if (headerMenu && dropdownMenu) {
                 headerMenu.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    dropdownMenu.style.display =
-                        dropdownMenu.style.display === "block" ? "none" : "block";
+                    const isMenuVisible = dropdownMenu.style.display === "block";
+                    dropdownMenu.style.display = isMenuVisible ? "none" : "block";
+                    
+                    // メニューレジェンドの表示/非表示を切り替え
+                    if (menuLegend) {
+                        menuLegend.style.display = isMenuVisible ? "none" : "block";
+                    }
                 });
 
                 // ドロップダウンメニュー自体のクリックイベントを阻止
@@ -859,14 +868,68 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.stopPropagation();
                 });
 
-                // ドキュメント全体をクリックしたらドロップダウンを閉じる
+                // ドキュメント全体をクリックしたらドロップダウンとレジェンドを閉じる
                 document.addEventListener("click", (e) => {
                     if (dropdownMenu.style.display === "block" && 
                         !dropdownMenu.contains(e.target) && 
-                        !headerMenu.contains(e.target)) {
+                        !headerMenu.contains(e.target) && 
+                        !menuLegend.contains(e.target)) {
                         dropdownMenu.style.display = "none";
+                        
+                        // メニューレジェンドも非表示にする
+                        if (menuLegend) {
+                            menuLegend.style.display = "none";
+                        }
                     }
                 });
+
+                // フローティングレジェンドのドラッグ機能
+                if (menuLegend) {
+                    const legendHeader = menuLegend.querySelector('.menu-legend-header');
+                    const closeButton = menuLegend.querySelector('.menu-legend-close');
+                    
+                    if (legendHeader && closeButton) {
+                        let isDragging = false;
+                        let offsetX, offsetY;
+                        
+                        // ドラッグ開始
+                        legendHeader.addEventListener('mousedown', (e) => {
+                            if (e.target === closeButton) return; // 閉じるボタンクリック時は無視
+                            
+                            isDragging = true;
+                            menuLegend.classList.add('dragging');
+                            offsetX = e.clientX - menuLegend.getBoundingClientRect().left;
+                            offsetY = e.clientY - menuLegend.getBoundingClientRect().top;
+                            
+                            e.preventDefault();
+                        });
+                        
+                        // ドラッグ中
+                        document.addEventListener('mousemove', (e) => {
+                            if (!isDragging) return;
+                            
+                            const x = Math.max(0, Math.min(e.clientX - offsetX, window.innerWidth - menuLegend.offsetWidth));
+                            const y = Math.max(0, Math.min(e.clientY - offsetY, window.innerHeight - menuLegend.offsetHeight));
+                            
+                            menuLegend.classList.add('menu-legend-position');
+                            menuLegend.style.setProperty('--legend-left', `${x}px`);
+                            menuLegend.style.setProperty('--legend-top', `${y}px`);
+                        });
+                        
+                        // ドラッグ終了
+                        document.addEventListener('mouseup', () => {
+                            if (isDragging) {
+                                isDragging = false;
+                                menuLegend.classList.remove('dragging');
+                            }
+                        });
+                        
+                        // 閉じるボタン
+                        closeButton.addEventListener('click', () => {
+                            menuLegend.style.display = 'none';
+                        });
+                    }
+                }
             }
 
             // ドロップダウンアイテムのクリックイベント

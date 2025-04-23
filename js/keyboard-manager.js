@@ -1333,8 +1333,16 @@
                 const dropdownMenu = this.getElementSafely('dropdown-menu');
                 if (!dropdownMenu) return;
                 
+                // CSSクラスを追加し、スタイルプロパティも直接設定
                 dropdownMenu.classList.add('dropdown-visible');
+                dropdownMenu.style.display = 'block';
                 this.isDropdownVisible = true;
+                
+                // メニューレジェンドを表示
+                const menuLegend = this.getElementSafely('menu-legend');
+                if (menuLegend) {
+                    menuLegend.style.display = 'block';
+                }
                 
                 // フォーカスをドロップダウンに移動
                 this.currentFocus.type = this.FOCUS_TYPES.DROPDOWN;
@@ -1344,7 +1352,7 @@
                 console.error('ドロップダウンメニューのオープン中にエラーが発生しました:', error);
             }
         }
-        
+
         /**
          * ドロップダウンメニューを閉じる（安全な実装）
          */
@@ -1353,8 +1361,19 @@
                 const dropdownMenu = this.getElementSafely('dropdown-menu');
                 if (!dropdownMenu) return;
                 
+                // CSSクラスを削除し、スタイルプロパティも直接設定
                 dropdownMenu.classList.remove('dropdown-visible');
+                dropdownMenu.style.display = 'none';
                 this.isDropdownVisible = false;
+                
+                // すべてのサブメニューを閉じる
+                this.closeAllSubmenus();
+                
+                // メニューレジェンドを非表示
+                const menuLegend = this.getElementSafely('menu-legend');
+                if (menuLegend) {
+                    menuLegend.style.display = 'none';
+                }
                 
                 // フォーカスをストーリーに戻す
                 this.currentFocus.type = this.FOCUS_TYPES.STORY;
