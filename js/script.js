@@ -151,6 +151,120 @@ document.addEventListener('DOMContentLoaded', function() {
         return input;
     }
 
+    // ハイライト対象の単語配列を安全に取得する関数（強化版）
+    function getSecureHighlightWordsArray() {
+        try {
+            // 1. highlightWordsCSVが定義されているか確認（変更なし）
+            if (typeof window.highlightWordsCSV !== 'string') {
+                console.warn('ハイライト対象の単語が定義されていません。');
+                return [];
+            }
+            
+            // 2. ファイル構造の検証（新規追加）
+            // highlight-words.jsの期待される構造
+            const expectedStructure = /^\/\/[^\n]*\n\/\/[^\n]*\nwindow\.highlightWordsCSV\s*=\s*`[^`]*`;?\s*$/;
+            
+            // スクリプト要素からhighlight-words.jsのソースコードを取得
+            const scriptElements = document.querySelectorAll('script[src*="highlight-words.js"]');
+            if (scriptElements.length === 0) {
+                console.error('highlight-words.jsスクリプトが見つかりません。');
+                return [];
+            }
+            
+            // script要素のsrc属性を使用して動的にファイル内容を検証する機能はCSPで制限される可能性があるため、
+            // 代わりにwindow.highlightWordsCSVの内容に対して厳密な検証を行う
+            
+            // 3. CSVの形式検証（新規追加）
+            // a. 許可される文字のみであることを検証（日本語、英数字、カンマ、スペースのみ）
+            const validCharsPattern = /^[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}a-zA-Z0-9\s,]*$/u;
+            if (!validCharsPattern.test(window.highlightWordsCSV)) {
+                console.error('ハイライト単語CSVに不正な文字が含まれています。');
+                return [];
+            }
+            
+            // b. 単語数の上限チェック（DoS対策）
+            const wordCount = window.highlightWordsCSV.split(',').length;
+            const MAX_WORD_COUNT = 100; // 最大単語数を設定
+            if (wordCount > MAX_WORD_COUNT) {
+                console.error(`ハイライト単語CSVに含まれる単語数(${wordCount})が上限(${MAX_WORD_COUNT})を超えています。`);
+                return [];
+            }
+            
+            // c. 総文字数の上限チェック（DoS対策）
+            const MAX_TOTAL_LENGTH = 5000; // 最大総文字数
+            if (window.highlightWordsCSV.length > MAX_TOTAL_LENGTH) {
+                console.error(`ハイライト単語CSVの総文字数(${window.highlightWordsCSV.length})が上限(${MAX_TOTAL_LENGTH})を超えています。`);
+                return [];
+            }
+            
+            // 4. 既存のセキュリティ検証（変更なし）
+            if (!validateCsvSafety(window.highlightWordsCSV)) {
+                console.error('ハイライト単語CSVに潜在的な危険パターンが含まれています。処理を中止します。');
+                return [];
+            }
+            
+            // 5. CSV文字列をサニタイズ（変更なし）
+            const sanitizedCSV = enhancedSanitizeInput(window.highlightWordsCSV);
+            
+            // 6. 分割処理の強化（一部変更）
+            const words = sanitizedCSV.split(',')
+                .map(word => word.trim())
+                .filter(word => {
+                    // 空文字チェック
+                    if (!word || word.length === 0) return false;
+                    
+                    // 単語長のチェック（変更なし）
+                    if (word.length > 50) return false;
+                    
+                    // 追加: 単語の内容チェック - 日本語、英数字、スペースのみ許可
+                    return /^[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}a-zA-Z0-9\s]*$/u.test(word);
+                });
+            
+            // 7. 重複チェック（新規追加）
+            const uniqueWords = [...new Set(words)];
+            if (uniqueWords.length < words.length) {
+                console.warn('ハイライト単語に重複があります。重複を除外します。');
+            }
+            
+            return uniqueWords;
+        } catch (error) {
+            console.error('ハイライト対象の単語の処理中にエラーが発生しました:', error);
+            return [];
+        }
+    }
+
+    // 追加: ページ読み込み時にファイル構造の検証を行う
+    document.addEventListener('DOMContentLoaded', function() {
+        // highlight-words.jsの構造検証
+        validateHighlightWordsFile();
+    });
+
+    // highlight-words.jsファイルの構造を検証する関数（新規追加）
+    function validateHighlightWordsFile() {
+        // ファイル構造の検証のためのメタデータ
+        const expectedFileMetadata = {
+            lineCount: 3, // 期待される行数
+            firstLinePattern: /^\/\/\s*ハイライト対象の単語を定義するファイル/, // 1行目のパターン
+            secondLinePattern: /^\/\/\s*単語をCSV形式で記述し/ // 2行目のパターン
+        };
+        
+        try {
+            // この関数は追加のセキュリティレイヤーとして機能
+            // 注: CSPの制限によりファイル内容を直接取得することは難しいため、
+            // window.highlightWordsCSVの形式と内容の検証に重点を置く
+            
+            if (typeof window.highlightWordsCSV !== 'string') {
+                console.error('highlight-words.js: 期待されるハイライト単語の定義が見つかりません。');
+                // 必要に応じてフォールバック処理を実装
+                window.highlightWordsCSV = ''; // セキュリティのため空の文字列に設定
+            }
+        } catch (error) {
+            console.error('highlight-words.jsの検証中にエラーが発生しました:', error);
+            // セキュリティのため機能を無効化
+            window.highlightWordsCSV = '';
+        }
+    }
+
     // 安全なHTML描画関数
     function renderSafeHtml(unsafeContent) {
         if (!unsafeContent) return "";
@@ -161,10 +275,18 @@ document.addEventListener('DOMContentLoaded', function() {
         // 改行のみを特別扱い
         const withLineBreaks = sanitized.replace(/\n/g, "<br>");
         
-        // 限定的な置換のみを行う
-        const withHighlights = withLineBreaks
-            .replace(/要印刷/g, '<span class="csv-text-highlight">要印刷</span>')
-            .replace(/画面/g, '<span class="csv-text-highlight">画面</span>');
+        // 動的にハイライトワードを適用する処理
+        let withHighlights = withLineBreaks;
+        const highlightWords = getSecureHighlightWordsArray();
+        
+        // 各ハイライトワードに対して処理
+        highlightWords.forEach(word => {
+            // 安全な置換処理
+            const segments = withHighlights.split(word);
+            if (segments.length > 1) {
+                withHighlights = segments.join(`<span class="csv-text-highlight">${word}</span>`);
+            }
+        });
         
         return withHighlights;
     }
@@ -401,13 +523,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const id = row.StepID;
                 const title = row.タイトル;
-                let desc = "";
-                let nota = ""; // 補足説明１を格納する変数を追加
                 
-                if (row.説明１) desc += row.説明１;
-                if (row.補足説明１) nota = row.補足説明１; // 補足説明１を取得
-                if (row.説明２) desc += "\n" + row.説明２;
-                if (row.説明３) desc += "\n" + row.説明３;
+                // 説明を個別に保持する構造に変更
+                const explanations = {
+                    exp1: row.説明１ || "",
+                    nota: row.補足説明１ || "", // 補足説明１
+                    exp2: row.説明２ || "",
+                    exp3: row.説明３ || ""
+                };
 
                 const options = [];
                 if (row.Option1Text && row.Option1Next) {
@@ -450,8 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 stepsData[id] = { 
                     id, 
                     title, 
-                    desc, 
-                    nota, // 補足説明１をステップデータに追加
+                    explanations, // 説明を構造化して保存
                     options, 
                     defaultNext,
                     // 自動選択が有効かどうかのフラグ（NonAutoSelectが1または真の場合は無効）
@@ -474,8 +596,12 @@ document.addEventListener('DOMContentLoaded', function() {
         stepsData["1"] = {
             id: "1",
             title: "エラー",
-            desc: "CSVデータにエラーがあります。修正してからやり直してください。",
-            nota: "",
+            explanations: {
+                exp1: "CSVデータにエラーがあります。修正してからやり直してください。",
+                nota: "",
+                exp2: "",
+                exp3: ""
+            },
             options: [],
             defaultNext: "",
             nonAutoSelect: false
@@ -624,27 +750,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     section.appendChild(titleDiv);
                 }
 
-                const descDiv = document.createElement("div");
-                descDiv.className = "story-desc";
+                // 説明１を表示
+                if (step.explanations.exp1) {
+                    const desc1Div = document.createElement("div");
+                    desc1Div.className = "story-desc";
+                    desc1Div.innerHTML = styleDesc(step.explanations.exp1);
+                    section.appendChild(desc1Div);
+                }
                 
-                // 説明１と補足説明１を組み合わせて表示
-                descDiv.innerHTML = styleDesc(step.desc);
-                section.appendChild(descDiv);
-                
-                // 補足説明があれば、別の要素として追加
-                if (step.nota) {
+                // 補足説明１（チェックボックス）を表示
+                if (step.explanations.nota) {
                     const notaDiv = document.createElement("div");
                     notaDiv.className = "story-nota";
                     
                     // 改行で分割してチェックボックスリストを作成
-                    const notaLines = step.nota.split('\n');
+                    const notaLines = step.explanations.nota.split('\n');
                     let checkboxHtml = '';
                     
-                    notaLines.forEach((line, index) => {
+                    notaLines.forEach((line, lineIndex) => {
                         if (line.trim()) { // 空行でなければチェックボックスを追加
                             checkboxHtml += `<div class="checkbox-item">
-                                <input type="checkbox" id="nota-check-${index}" class="nota-checkbox">
-                                <label for="nota-check-${index}">${renderSafeHtml(line)}</label>
+                                <input type="checkbox" id="nota-check-${entry.sequenceId}-${lineIndex}" class="nota-checkbox">
+                                <label for="nota-check-${entry.sequenceId}-${lineIndex}">${renderSafeHtml(line)}</label>
                             </div>`;
                         } else {
                             // 空行の場合は、チェックボックスなしの空のdivを追加
@@ -654,6 +781,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     notaDiv.innerHTML = checkboxHtml;
                     section.appendChild(notaDiv);
+                }
+                
+                // 説明２と説明３を表示（順番を維持）
+                if (step.explanations.exp2 || step.explanations.exp3) {
+                    const additionalDescDiv = document.createElement("div");
+                    additionalDescDiv.className = "story-desc"; // additional-descクラスを削除
+                    
+                    let additionalDesc = "";
+                    if (step.explanations.exp2) additionalDesc += step.explanations.exp2;
+                    if (step.explanations.exp3) {
+                        if (additionalDesc) additionalDesc += "\n";
+                        additionalDesc += step.explanations.exp3;
+                    }
+                    
+                    additionalDescDiv.innerHTML = styleDesc(additionalDesc);
+                    section.appendChild(additionalDescDiv);
                 }
 
                 // 自動選択メッセージの表示
