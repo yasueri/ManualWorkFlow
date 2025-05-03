@@ -151,22 +151,128 @@ document.addEventListener('DOMContentLoaded', function() {
         return input;
     }
 
+    // highlight-words.jsファイルの構造を検証する関数
+    function validateHighlightWordsFile() {
+        // ファイル構造の検証のためのメタデータ
+        const expectedFileMetadata = {
+            lineCount: 3, // 期待される行数
+            firstLinePattern: /^\/\/\s*ハイライト対象の単語を定義するファイル/, // 1行目のパターン
+            secondLinePattern: /^\/\/\s*単語をCSV形式で記述し/ // 2行目のパターン
+        };
+        
+        try {
+            // この関数は追加のセキュリティレイヤーとして機能
+            // 注: CSPの制限によりファイル内容を直接取得することは難しいため、
+            // window.highlightWordsCSVの形式と内容の検証に重点を置く
+            
+            if (typeof window.highlightWordsCSV !== 'string') {
+                console.error('highlight-words.js: 期待されるハイライト単語の定義が見つかりません。');
+                // 必要に応じてフォールバック処理を実装
+                window.highlightWordsCSV = ''; // セキュリティのため空の文字列に設定
+            }
+        } catch (error) {
+            console.error('highlight-words.jsの検証中にエラーが発生しました:', error);
+            // セキュリティのため機能を無効化
+            window.highlightWordsCSV = '';
+        }
+    }
+
+    // ハイライトファイルの構造検証を実行
+    validateHighlightWordsFile();
+
+    
+    // ハイライト対象の単語配列を安全に取得する関数
+    function getSecureHighlightWordsArray() {
+        try {
+            // 1. highlightWordsCSVが定義されているか確認
+            if (typeof window.highlightWordsCSV !== 'string') {
+                console.warn('ハイライト対象の単語が定義されていません。');
+                return [];
+            }
+            
+            // 2. CSVの安全性を検証
+            if (!validateCsvSafety(window.highlightWordsCSV)) {
+                console.error('ハイライト単語CSVに潜在的な危険パターンが含まれています。処理を中止します。');
+                return [];
+            }
+            
+            // 3. 既存のparseCSV関数を活用してCSVをパース (注: 元のscript.jsにある関数を再利用)
+            const rows = parseCSV(window.highlightWordsCSV);
+            
+            // 4. 単語リストを生成
+            const words = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                for (let j = 0; j < row.length; j++) {
+                    const token = row[j].trim();
+                    if (token.length > 0) {
+                        // 引用符で囲まれている場合は引用符を削除
+                        const cleaned = token.startsWith('"') && token.endsWith('"') 
+                            ? token.substring(1, token.length - 1) 
+                            : token;
+                        
+                        if (cleaned.length > 0) {
+                            words.push(cleaned);
+                        }
+                    }
+                }
+            }
+            
+            return words;
+        } catch (error) {
+            console.error('ハイライト対象の単語の処理中にエラーが発生しました:', error);
+            return [];
+        }
+    }
+
     // 安全なHTML描画関数
     function renderSafeHtml(unsafeContent) {
         if (!unsafeContent) return "";
         
-        // まずコンテンツをサニタイズ
-        const sanitized = enhancedSanitizeInput(unsafeContent);
-        
-        // 改行のみを特別扱い
-        const withLineBreaks = sanitized.replace(/\n/g, "<br>");
-        
-        // 限定的な置換のみを行う
-        const withHighlights = withLineBreaks
-            .replace(/要印刷/g, '<span class="csv-text-highlight">要印刷</span>')
-            .replace(/画面/g, '<span class="csv-text-highlight">画面</span>');
-        
-        return withHighlights;
+        try {
+            // 1. コンテンツをサニタイズ
+            const sanitized = enhancedSanitizeInput(unsafeContent);
+            
+            // 2. 改行のみを特別扱い
+            const withLineBreaks = sanitized.replace(/\n/g, "<br>");
+            
+            // 3. ハイライト対象の単語リストを取得
+            const highlightWords = getSecureHighlightWordsArray();
+            
+            // 4. 単語の長さでソートして長い順に処理（部分一致を防ぐため）
+            const sortedWords = [...highlightWords].sort((a, b) => b.length - a.length);
+            
+            // 5. ハイライト処理の実施
+            let result = withLineBreaks;
+            
+            for (const word of sortedWords) {
+                if (!word || word.length === 0) continue; // 空の単語はスキップ
+                
+                // 単語内の改行を<br>に置換
+                const processedWord = word.replace(/\n/g, "<br>");
+                
+                // 正規表現の特殊文字をエスケープ
+                const escapedForRegex = processedWord.replace(/[.*+?^${}()|[\]\\,]/g, '\\$&');
+                
+                // 正規表現オブジェクトを作成し置換を実行
+                const regex = new RegExp(escapedForRegex, 'g');
+                if (regex.test(result)) {
+                    // 正規表現をリセット
+                    regex.lastIndex = 0;
+                    
+                    // 置換処理
+                    result = result.replace(regex, match => 
+                        `<span class="csv-text-highlight">${match}</span>`
+                    );
+                }
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('HTML描画中にエラーが発生しました:', error);
+            // エラー時は安全のためサニタイズだけを適用して返す
+            return enhancedSanitizeInput(unsafeContent).replace(/\n/g, "<br>");
+        }
     }
 
     // CSVデータの処理
@@ -401,13 +507,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 const id = row.StepID;
                 const title = row.タイトル;
-                let desc = "";
-                let nota = ""; // 補足説明１を格納する変数を追加
                 
-                if (row.説明１) desc += row.説明１;
-                if (row.補足説明１) nota = row.補足説明１; // 補足説明１を取得
-                if (row.説明２) desc += "\n" + row.説明２;
-                if (row.説明３) desc += "\n" + row.説明３;
+                // 説明を個別に保持する構造に変更
+                const explanations = {
+                    exp1: row.説明１ || "",
+                    nota: row.補足説明１ || "", // 補足説明１
+                    exp2: row.説明２ || "",
+                    exp3: row.説明３ || ""
+                };
 
                 const options = [];
                 if (row.Option1Text && row.Option1Next) {
@@ -450,8 +557,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 stepsData[id] = { 
                     id, 
                     title, 
-                    desc, 
-                    nota, // 補足説明１をステップデータに追加
+                    explanations, // 説明を構造化して保存
                     options, 
                     defaultNext,
                     // 自動選択が有効かどうかのフラグ（NonAutoSelectが1または真の場合は無効）
@@ -474,8 +580,12 @@ document.addEventListener('DOMContentLoaded', function() {
         stepsData["1"] = {
             id: "1",
             title: "エラー",
-            desc: "CSVデータにエラーがあります。修正してからやり直してください。",
-            nota: "",
+            explanations: {
+                exp1: "CSVデータにエラーがあります。修正してからやり直してください。",
+                nota: "",
+                exp2: "",
+                exp3: ""
+            },
             options: [],
             defaultNext: "",
             nonAutoSelect: false
@@ -624,27 +734,28 @@ document.addEventListener('DOMContentLoaded', function() {
                     section.appendChild(titleDiv);
                 }
 
-                const descDiv = document.createElement("div");
-                descDiv.className = "story-desc";
+                // 説明１を表示
+                if (step.explanations.exp1) {
+                    const desc1Div = document.createElement("div");
+                    desc1Div.className = "story-desc";
+                    desc1Div.innerHTML = styleDesc(step.explanations.exp1);
+                    section.appendChild(desc1Div);
+                }
                 
-                // 説明１と補足説明１を組み合わせて表示
-                descDiv.innerHTML = styleDesc(step.desc);
-                section.appendChild(descDiv);
-                
-                // 補足説明があれば、別の要素として追加
-                if (step.nota) {
+                // 補足説明１（チェックボックス）を表示
+                if (step.explanations.nota) {
                     const notaDiv = document.createElement("div");
                     notaDiv.className = "story-nota";
                     
                     // 改行で分割してチェックボックスリストを作成
-                    const notaLines = step.nota.split('\n');
+                    const notaLines = step.explanations.nota.split('\n');
                     let checkboxHtml = '';
                     
-                    notaLines.forEach((line, index) => {
+                    notaLines.forEach((line, lineIndex) => {
                         if (line.trim()) { // 空行でなければチェックボックスを追加
                             checkboxHtml += `<div class="checkbox-item">
-                                <input type="checkbox" id="nota-check-${index}" class="nota-checkbox">
-                                <label for="nota-check-${index}">${renderSafeHtml(line)}</label>
+                                <input type="checkbox" id="nota-check-${entry.sequenceId}-${lineIndex}" class="nota-checkbox">
+                                <label for="nota-check-${entry.sequenceId}-${lineIndex}">${renderSafeHtml(line)}</label>
                             </div>`;
                         } else {
                             // 空行の場合は、チェックボックスなしの空のdivを追加
@@ -654,6 +765,22 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     notaDiv.innerHTML = checkboxHtml;
                     section.appendChild(notaDiv);
+                }
+                
+                // 説明２と説明３を表示（順番を維持）
+                if (step.explanations.exp2 || step.explanations.exp3) {
+                    const additionalDescDiv = document.createElement("div");
+                    additionalDescDiv.className = "story-desc"; // additional-descクラスを削除
+                    
+                    let additionalDesc = "";
+                    if (step.explanations.exp2) additionalDesc += step.explanations.exp2;
+                    if (step.explanations.exp3) {
+                        if (additionalDesc) additionalDesc += "\n";
+                        additionalDesc += step.explanations.exp3;
+                    }
+                    
+                    additionalDescDiv.innerHTML = styleDesc(additionalDesc);
+                    section.appendChild(additionalDescDiv);
                 }
 
                 // 自動選択メッセージの表示
