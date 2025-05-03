@@ -1,14 +1,15 @@
 ■プロジェクト構成
 ./
-├── index.html                              ← トップページ
+├── index.html                           ← トップページ
 ├── css/
-│        ├── index.css                    ← トップページ用のcss
-│        └── style.css                     ← それ以外のcss
+│        ├── index.css                   ← トップページ用のcss
+│        └── style.css                   ← それ以外のcss
 ├── data/
+│        ├── highlight-words.js          ← 強調表示する文字を入力するためのJS
 │        └── ●●.js                       ← CSVデータを流し込むためのJS（pagesと同名ファイル）
 ├── js/
-│        ├── script.js                     ← メイン
-│        └── keyboard-manager.js  ← キーボード操作（依存関係なし。単体で動作）
+│        ├── script.js                   ← メイン
+│        └── keyboard-manager.js         ← キーボード操作（依存関係なし。単体で動作）
 └── pages/
            └── ●●.html                   ← コンテンツページ
 
